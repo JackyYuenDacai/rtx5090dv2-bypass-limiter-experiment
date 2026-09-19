@@ -1,0 +1,48 @@
+diff --git a/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c b/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
+--- a/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
++++ b/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
+@@ -60,10 +60,20 @@
+         return NV_OK;
+     }
+ 
+     if (pDevice->nCudaLimitRefCnt > 0)
+     {
++        /* This build never forwarded this device's host CUDA-limit enables. */
++        if (dv2LimitExperimentBypassEnabled(pGpu))
++        {
++            NV_PRINTF(LEVEL_WARNING,
++                      "DV2EXP CUDA bypass teardown refs=%u\n",
++                      pDevice->nCudaLimitRefCnt);
++            pDevice->nCudaLimitRefCnt = 0;
++            return NV_OK;
++        }
++
+         status = pRmApi->Control(pRmApi,
+                                  pGpu->hInternalClient,
+                                  pGpu->hInternalDevice,
+                                  NV0080_CTRL_CMD_INTERNAL_PERF_CUDA_LIMIT_DISABLE,
+                                  NULL,
+@@ -132,10 +142,23 @@
+     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, kperfCudaLimitCliGet(pDevice, &bCudaLimitAfter));
+ 
+     // If the limit is changing.
+     if (bCudaLimitBefore != bCudaLimitAfter)
+     {
++        /*
++         * Experimental: suppress ONLY this client-requested CUDA clock limit.
++         * Keep refcount validation above, including unmatched-disable errors.
++         * This does not override firmware policy or SM instruction-rate fuses.
++         */
++        if (dv2LimitExperimentBypassEnabled(pGpu))
++        {
++            NV_PRINTF(LEVEL_WARNING,
++                      "DV2EXP CUDA bypass active=%u refs=%u (unverified AI effect)\n",
++                      (NvU32)bCudaLimitAfter, pDevice->nCudaLimitRefCnt);
++            return NV_OK;
++        }
++
+         status = pRmApi->Control(pRmApi,
+                                  RES_GET_CLIENT_HANDLE(pDevice),
+                                  RES_GET_HANDLE(pDevice),
+                                  NV0080_CTRL_CMD_INTERNAL_PERF_CUDA_LIMIT_SET_CONTROL,
+                                  pParams,

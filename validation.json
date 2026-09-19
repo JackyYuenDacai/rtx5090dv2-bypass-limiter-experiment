@@ -1,0 +1,20 @@
+{
+  "base_commit": "61dcc93722ecb418bb5f2e00923f05b4b8051dd1",
+  "compiler": "gcc.EXE (conda-forge gcc 13.3.0-2) 13.3.0",
+  "checks": [
+    "PASS: 0001-dv2-limit-diagnostics.patch applies in sequence to isolated source copies",
+    "PASS: 0002-dv2-experimental-host-cuda-limit-bypass.patch applies in sequence to isolated source copies",
+    "trace=0, bypass=0: PASS: targeting, default behavior, nested requests, underflow, teardown, multiple clients, errors",
+    "trace=1, bypass=0: PASS: targeting, default behavior, nested requests, underflow, teardown, multiple clients, errors",
+    "trace=0, bypass=1: PASS: targeting, default behavior, nested requests, underflow, teardown, multiple clients, errors",
+    "trace=1, bypass=1: PASS: targeting, default behavior, nested requests, underflow, teardown, multiple clients, errors",
+    "PASS: invalid build flag rejected"
+  ],
+  "not_validated": [
+    "full Linux module compilation",
+    "firmware behavior",
+    "AI performance",
+    "hardware bypass effectiveness"
+  ],
+  "gpu_access": false
+}

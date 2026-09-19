@@ -1,0 +1,174 @@
+diff --git a/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c b/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
+--- a/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
++++ b/src/nvidia/src/kernel/gpu/perf/kern_cuda_limit.c
+@@ -24,10 +24,11 @@
+ /*!
+  * @brief  All functions related to the Cuda Safe feature.
+  */
+ #include "gpu/device/device.h"
+ #include "gpu/perf/kern_cuda_limit.h"
++#include "gpu/perf/dv2_limit_experiment.h"
+ #include "rmapi/rmapi.h"
+ #include "gpu/gpu.h"
+ 
+ /* ------------------------ Static Function Prototypes --------------------- */
+ static NV_STATUS kperfCudaLimitCliGet(Device *pDevice, NvBool *pbCudaLimit);
+@@ -111,10 +112,18 @@
+     else if (pGpu->getProperty(pGpu, PDB_PROP_GPU_CLKS_IN_TEGRA_SOC))
+     {
+         return NV_OK;
+     }
+ 
++    if (dv2LimitExperimentTraceEnabled(pGpu))
++    {
++        NV_PRINTF(LEVEL_WARNING,
++                  "DV2EXP CUDA request=%u client=0x%x device=0x%x refs=%u\n",
++                  (NvU32)pParams->bCudaLimit, RES_GET_CLIENT_HANDLE(pDevice),
++                  RES_GET_HANDLE(pDevice), pDevice->nCudaLimitRefCnt);
++    }
++
+     // Obtain current Cuda limit activation setting.
+     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, kperfCudaLimitCliGet(pDevice, &bCudaLimitBefore));
+ 
+     // Set Cuda activation setting and error check the client ref count.
+     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, kperfCudaLimitCliSet(pDevice, pParams->bCudaLimit));
+@@ -129,10 +138,16 @@
+                                  RES_GET_CLIENT_HANDLE(pDevice),
+                                  RES_GET_HANDLE(pDevice),
+                                  NV0080_CTRL_CMD_INTERNAL_PERF_CUDA_LIMIT_SET_CONTROL,
+                                  pParams,
+                                  sizeof(*pParams));
++        if (dv2LimitExperimentTraceEnabled(pGpu))
++        {
++            NV_PRINTF(LEVEL_WARNING,
++                      "DV2EXP CUDA forwarded active=%u status=0x%x\n",
++                      (NvU32)bCudaLimitAfter, status);
++        }
+     }
+ 
+     return status;
+ }
+ /* ---------------------- Private Static Functions -------------------------- */
+diff --git a/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c b/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c
+--- a/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c
++++ b/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c
+@@ -47,10 +47,11 @@
+ #include "gpu/mem_mgr/virt_mem_allocator.h"
+ #include "gpu/mmu/kern_gmmu.h"
+ #include "platform/sli/sli.h"
+ #include "rmapi/rs_utils.h"
+ #include "rmapi/client.h"
++#include "gpu/perf/dv2_limit_experiment.h"
+ 
+ #include "vgpu/vgpu_events.h"
+ #include "vgpu/rpc.h"
+ 
+ #include "class/cla06f.h"
+@@ -1423,10 +1424,29 @@
+                              hSubdevice,
+                              NV2080_CTRL_CMD_INTERNAL_STATIC_KGR_GET_SM_ISSUE_RATE_MODIFIER_V2,
+                              pParams,
+                              sizeof(pParams->smIssueRateModifierV2));
+ 
++    /* Observe the existing firmware response; do not change any returned values. */
++    if (dv2LimitExperimentTraceEnabled(pGpu))
++    {
++        NV_PRINTF(LEVEL_WARNING, "DV2EXP issue-rate-v2 gr=%u status=0x%x\n",
++                  grIdx, status);
++        if (status == NV_OK)
++        {
++            NvU32 count = pParams->smIssueRateModifierV2.smIssueRateModifierV2[grIdx].smIssueRateModifierListSize;
++            NV_PRINTF(LEVEL_WARNING, "DV2EXP issue-rate-v2 count=%u\n", count);
++            for (NvU32 i = 0; (i < count) && (i < NV2080_CTRL_GR_SM_ISSUE_RATE_MODIFIER_V2_MAX_LIST_SIZE); i++)
++            {
++                NV_PRINTF(LEVEL_WARNING,
++                          "DV2EXP issue-rate-v2 index=0x%x data=0x%x\n",
++                          pParams->smIssueRateModifierV2.smIssueRateModifierV2[grIdx].smIssueRateModifierList[i].index,
++                          pParams->smIssueRateModifierV2.smIssueRateModifierV2[grIdx].smIssueRateModifierList[i].data);
++            }
++        }
++    }
++
+     if (status == NV_OK)
+     {
+         pPrivate->staticInfo.pSmIssueRateModifierV2 = portMemAllocNonPaged(sizeof(*pPrivate->staticInfo.pSmIssueRateModifierV2));
+         if (pPrivate->staticInfo.pSmIssueRateModifierV2 == NULL)
+         {
+@@ -1448,10 +1468,29 @@
+                              hClient,
+                              hSubdevice,
+                              NV2080_CTRL_CMD_INTERNAL_STATIC_KGR_GET_SM_ISSUE_THROTTLE_CTRL,
+                              pParams,
+                              sizeof(pParams->smIssueThrottleCtrl));
++
++    /* Observe the existing firmware response; do not change any returned values. */
++    if (dv2LimitExperimentTraceEnabled(pGpu))
++    {
++        NV_PRINTF(LEVEL_WARNING, "DV2EXP issue-throttle gr=%u status=0x%x\n",
++                  grIdx, status);
++        if (status == NV_OK)
++        {
++            NvU32 count = pParams->smIssueThrottleCtrl.smIssueThrottleCtrl[grIdx].smIssueThrottleCtrlListSize;
++            NV_PRINTF(LEVEL_WARNING, "DV2EXP issue-throttle count=%u\n", count);
++            for (NvU32 i = 0; (i < count) && (i < NV2080_CTRL_GR_SM_ISSUE_THROTTLE_CTRL_MAX_LIST_SIZE); i++)
++            {
++                NV_PRINTF(LEVEL_WARNING,
++                          "DV2EXP issue-throttle index=0x%x data=0x%x\n",
++                          pParams->smIssueThrottleCtrl.smIssueThrottleCtrl[grIdx].smIssueThrottleCtrlList[i].index,
++                          pParams->smIssueThrottleCtrl.smIssueThrottleCtrl[grIdx].smIssueThrottleCtrlList[i].data);
++            }
++        }
++    }
+ 
+     if (status == NV_OK)
+     {
+         pPrivate->staticInfo.pSmIssueThrottleCtrl = portMemAllocNonPaged(sizeof(*pPrivate->staticInfo.pSmIssueThrottleCtrl));
+         if (pPrivate->staticInfo.pSmIssueThrottleCtrl == NULL)
+diff --git a/src/nvidia/inc/kernel/gpu/perf/dv2_limit_experiment.h b/src/nvidia/inc/kernel/gpu/perf/dv2_limit_experiment.h
+new file mode 100644
+--- /dev/null
++++ b/src/nvidia/inc/kernel/gpu/perf/dv2_limit_experiment.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: MIT */
++/* Experimental diagnostics. These controls are not upstream NVIDIA options. */
++#ifndef DV2_LIMIT_EXPERIMENT_H
++#define DV2_LIMIT_EXPERIMENT_H
++
++#include "gpu/gpu.h"
++#include "nvdevid.h"
++
++/* Build-time settings: rebuild/reload all modules when changing either one. */
++#ifndef NV_DV2_TRACE_LIMITS
++#define NV_DV2_TRACE_LIMITS 0
++#endif
++#ifndef NV_DV2_SKIP_HOST_CUDA_LIMIT
++#define NV_DV2_SKIP_HOST_CUDA_LIMIT 0
++#endif
++
++#if ((NV_DV2_TRACE_LIMITS != 0) && (NV_DV2_TRACE_LIMITS != 1)) || \
++    ((NV_DV2_SKIP_HOST_CUDA_LIMIT != 0) && (NV_DV2_SKIP_HOST_CUDA_LIMIT != 1))
++#error "DV2 experiment flags must be 0 or 1"
++#endif
++
++static NV_INLINE NvBool
++dv2LimitExperimentMatchesGpu(OBJGPU *pGpu)
++{
++    return !IS_VIRTUAL(pGpu) &&
++           (DRF_VAL(_PCI, _DEVID, _DEVICE, pGpu->idInfo.PCIDeviceID) == 0x2B8CU);
++}
++
++static NV_INLINE NvBool
++dv2LimitExperimentTraceEnabled(OBJGPU *pGpu)
++{
++    return ((NV_DV2_TRACE_LIMITS != 0) || (NV_DV2_SKIP_HOST_CUDA_LIMIT != 0)) &&
++           dv2LimitExperimentMatchesGpu(pGpu);
++}
++
++static NV_INLINE NvBool
++dv2LimitExperimentBypassEnabled(OBJGPU *pGpu)
++{
++    return (NV_DV2_SKIP_HOST_CUDA_LIMIT != 0) &&
++           dv2LimitExperimentMatchesGpu(pGpu);
++}
++
++#endif
